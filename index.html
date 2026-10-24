@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELP Attendance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f5f9;--card:#fff;--ink:#1b2540;--mute:#5d6786;--line:#dbe0ec;--brand:#2b4ac8;--P:#1f9d62;--L:#d98a00;--A:#d23b3b;--E:#6b7bb5;--tint:#eaeefb}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#11162a;--card:#1a2140;--ink:#eef1fb;--mute:#9aa5c9;--line:#2c3558;--brand:#7f98ff;--tint:#232c52}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Atkinson Hyperlegible",system-ui,Arial,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.wrap{max-width:900px;margin:0 auto;padding:0 16px}
+.top{display:flex;align-items:center;gap:12px;padding:12px 0;flex-wrap:wrap}
+h1{font-size:1.15rem;margin:0;flex:1}
+nav{display:flex;gap:4px;overflow-x:auto;padding-bottom:8px}
+nav button{border:0;background:none;color:var(--mute);padding:8px 14px;border-radius:8px;font:inherit;font-weight:700;cursor:pointer}
+nav button[aria-selected=true]{background:var(--tint);color:var(--brand)}
+main{padding:20px 0 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--mute);font-weight:700}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:42px}
+textarea{width:100%;min-height:110px}
+button.btn{font:inherit;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:8px;cursor:pointer;min-height:42px}
+button.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+button.btn.dan{color:var(--A)}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.stu{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.stu:first-child{border-top:0}
+.stu .n{flex:1;min-width:140px;font-weight:700}
+.seg{display:flex;gap:4px}
+.seg button{border:2px solid var(--line);background:var(--card);color:var(--mute);border-radius:8px;min-width:46px;min-height:42px;padding:0 10px;font:inherit;font-weight:700;cursor:pointer}
+.seg button[aria-pressed=true]{color:#fff;border-color:transparent}
+.seg [data-s=P][aria-pressed=true]{background:var(--P)}.seg [data-s=L][aria-pressed=true]{background:var(--L)}
+.seg [data-s=A][aria-pressed=true]{background:var(--A)}.seg [data-s=E][aria-pressed=true]{background:var(--E)}
+.sum{display:flex;gap:14px;flex-wrap:wrap;font-weight:700;margin-bottom:6px}
+.sum span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:var(--c)}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 8px;border-top:1px solid var(--line)}
+th{font-size:.85rem;color:var(--mute)}
+.scroll{overflow-x:auto}
+.low{color:var(--A);font-weight:700}
+.bar{height:8px;background:var(--line);border-radius:4px;min-width:70px}.bar i{display:block;height:100%;border-radius:4px;background:var(--P)}
+.muted{color:var(--mute);font-size:.9rem}
+.empty{text-align:center;color:var(--mute);padding:26px 0}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+@media(max-width:560px){.seg button{min-width:40px;padding:0 6px}.stu .n{flex-basis:100%}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+ <div class="top"><h1>ELP Attendance</h1>
+  <label>Class<select id="cls"></select></label>
+  <button class="btn" id="newCls">New class</button></div>
+ <nav role="tablist" id="tabs"></nav>
+</div></header>
+<main class="wrap" id="view"></main>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s), KEY='elp-attendance-v1';
+const LBL={P:'Present',L:'Late',A:'Absent',E:'Excused'}, COL={P:'--P',L:'--L',A:'--A',E:'--E'};
+const uid=()=>Math.random().toString(36).slice(2,9);
+const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+let db={classes:[],records:{},current:null}, tab='take', date=today(), from='', to='';
+try{const s=localStorage.getItem(KEY);if(s)db=JSON.parse(s)}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){toast('Storage is full or blocked. Download a backup.')}};
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),2200)}
+const cur=()=>db.classes.find(c=>c.id===db.current);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
+const csvCell=v=>'"'+String(v).replace(/"/g,'""')+'"';
+const dates=c=>Object.keys(db.records).filter(k=>k.startsWith(c.id+'|')).map(k=>k.split('|')[1]).filter(d=>(!from||d>=from)&&(!to||d<=to)).sort();
+function stats(c){const ds=dates(c);return c.students.map(s=>{const t={P:0,L:0,A:0,E:0,none:0};ds.forEach(d=>{const v=(db.records[c.id+'|'+d]||{})[s.id];v?t[v]++:t.none++});const base=t.P+t.L+t.A;return{s,t,rate:base?Math.round((t.P+t.L)/base*100):null}})}
+
+function renderHead(){
+ $('#cls').innerHTML=db.classes.map(c=>`<option value="${c.id}" ${c.id===db.current?'selected':''}>${esc(c.name)}</option>`).join('')||'<option>No classes</option>';
+ const T={take:'Take attendance',students:'Students',report:'Report',data:'Backup'};
+ $('#tabs').innerHTML=Object.entries(T).map(([k,v])=>`<button role="tab" data-t="${k}" aria-selected="${k===tab}">${v}</button>`).join('');
+}
+function render(){
+ renderHead();const c=cur(),v=$('#view');
+ if(!c&&tab!=='data'){v.innerHTML='<div class="card empty"><p>Create your first class to start.</p><button class="btn pri" onclick="addClass()">New class</button></div>';return}
+ ({take:viewTake,students:viewStudents,report:viewReport,data:viewData})[tab](c,v);
+}
+function viewTake(c,v){
+ if(!c.students.length){v.innerHTML='<div class="card empty">No students yet. Add them in the Students tab.</div>';return}
+ const rec=db.records[c.id+'|'+date]||{},n={P:0,L:0,A:0,E:0};Object.values(rec).forEach(x=>n[x]++);
+ v.innerHTML=`<div class="card"><div class="row"><label>Date<input type="date" id="dt" value="${date}"></label>
+ <button class="btn pri" id="allP">Mark all present</button><button class="btn" id="clr">Clear day</button></div></div>
+ <div class="card"><div class="sum">${Object.keys(LBL).map(k=>`<span style="--c:var(${COL[k]})">${LBL[k]} ${n[k]}</span>`).join('')}<span style="--c:var(--line)">Not marked ${c.students.length-Object.keys(rec).length}</span></div>
+ ${c.students.map(s=>`<div class="stu"><div class="n">${esc(s.name)}</div><div class="seg" role="group" aria-label="${esc(s.name)}">${Object.keys(LBL).map(k=>`<button data-s="${k}" data-id="${s.id}" aria-pressed="${rec[s.id]===k}" title="${LBL[k]}">${k}</button>`).join('')}</div></div>`).join('')}
+ <p class="muted">P = Present, L = Late, A = Absent, E = Excused. Changes save automatically.</p></div>`;
+ $('#dt').onchange=e=>{date=e.target.value||today();render()};
+ $('#allP').onclick=()=>{const k=c.id+'|'+date;db.records[k]={};c.students.forEach(s=>db.records[k][s.id]='P');save();render();toast('Everyone marked present')};
+ $('#clr').onclick=()=>{if(confirm('Clear attendance for '+date+'?')){delete db.records[c.id+'|'+date];save();render()}};
+ v.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{const k=c.id+'|'+date;db.records[k]=db.records[k]||{};
+  db.records[k][b.dataset.id]===b.dataset.s?delete db.records[k][b.dataset.id]:db.records[k][b.dataset.id]=b.dataset.s;
+  if(!Object.keys(db.records[k]).length)delete db.records[k];save();const y=scrollY;render();scrollTo(0,y)});
+}
+function viewStudents(c,v){
+ v.innerHTML=`<div class="card"><h2 style="margin-top:0">${esc(c.name)} · ${c.students.length} students</h2>
+ <div class="row"><label style="flex:1">Add one student<input id="one" placeholder="Full name"></label><button class="btn pri" id="addOne">Add</button></div>
+ <p class="muted">Or paste a list, one name per line.</p><textarea id="bulk" placeholder="Sokha Chan&#10;Dara Kim&#10;Maly Sok"></textarea>
+ <div class="row" style="margin-top:8px"><button class="btn" id="addBulk">Add list</button><button class="btn" id="ren">Rename class</button><button class="btn dan" id="delC">Delete class</button></div></div>
+ <div class="card">${c.students.length?c.students.map((s,i)=>`<div class="stu"><div class="n">${i+1}. ${esc(s.name)}</div><button class="btn" data-ed="${s.id}">Edit</button><button class="btn dan" data-rm="${s.id}">Remove</button></div>`).join(''):'<div class="empty">No students yet.</div>'}</div>`;
+ const add=names=>{names=names.map(x=>x.trim()).filter(Boolean);if(c.students.length+names.length>50)toast('Over 50 students. Added anyway.');names.forEach(n=>c.students.push({id:uid(),name:n}));save();render()};
+ $('#addOne').onclick=()=>add([$('#one').value]);$('#one').onkeydown=e=>{if(e.key==='Enter')add([e.target.value])};
+ $('#addBulk').onclick=()=>add($('#bulk').value.split('\n'));
+ $('#ren').onclick=()=>{const n=prompt('Class name',c.name);if(n&&n.trim()){c.name=n.trim();save();render()}};
+ $('#delC').onclick=()=>{if(confirm('Delete "'+c.name+'" and all its attendance?')){Object.keys(db.records).filter(k=>k.startsWith(c.id+'|')).forEach(k=>delete db.records[k]);db.classes=db.classes.filter(x=>x!==c);db.current=db.classes[0]?.id||null;save();render()}};
+ v.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const s=c.students.find(x=>x.id===b.dataset.rm);if(confirm('Remove '+s.name+'?')){c.students=c.students.filter(x=>x!==s);Object.values(db.records).forEach(r=>delete r[s.id]);save();render()}});
+ v.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{const s=c.students.find(x=>x.id===b.dataset.ed),n=prompt('Student name',s.name);if(n&&n.trim()){s.name=n.trim();save();render()}});
+}
+function viewReport(c,v){
+ const st=stats(c),ds=dates(c);
+ v.innerHTML=`<div class="card"><div class="row"><label>From<input type="date" id="f" value="${from}"></label><label>To<input type="date" id="t" value="${to}"></label>
+ <button class="btn" id="csv">Download CSV</button><button class="btn" id="prt">Print</button></div>
+ <p class="muted">${ds.length} class sessions. Rate = (Present + Late) ÷ (Present + Late + Absent). Excused days are not counted. Below 80% is flagged.</p></div>
+ <div class="card scroll">${ds.length?`<table><thead><tr><th>Student</th><th>P</th><th>L</th><th>A</th><th>E</th><th>Rate</th><th></th></tr></thead><tbody>${st.map(r=>`<tr><td>${esc(r.s.name)}</td><td>${r.t.P}</td><td>${r.t.L}</td><td>${r.t.A}</td><td>${r.t.E}</td><td class="${r.rate!==null&&r.rate<80?'low':''}">${r.rate===null?'–':r.rate+'%'}</td><td><div class="bar"><i style="width:${r.rate||0}%;${r.rate!==null&&r.rate<80?'background:var(--A)':''}"></i></div></td></tr>`).join('')}</tbody></table>`:'<div class="empty">No attendance recorded in this range.</div>'}</div>`;
+ $('#f').onchange=e=>{from=e.target.value;render()};$('#t').onchange=e=>{to=e.target.value;render()};$('#prt').onclick=()=>print();
+ $('#csv').onclick=()=>{const rows=[['Student',...ds,'Present','Late','Absent','Excused','Rate %']];
+  st.forEach(r=>rows.push([r.s.name,...ds.map(d=>(db.records[c.id+'|'+d]||{})[r.s.id]||''),r.t.P,r.t.L,r.t.A,r.t.E,r.rate===null?'':r.rate]));
+  download(c.name.replace(/\W+/g,'_')+'_attendance.csv',rows.map(r=>r.map(csvCell).join(',')).join('\n'),'text/csv')};
+}
+function viewData(c,v){
+ v.innerHTML=`<div class="card"><h2 style="margin-top:0">Backup and restore</h2>
+ <p>Data is stored in this browser on this device. Download a backup every week, and use it to move to another device.</p>
+ <div class="row"><button class="btn pri" id="bk">Download backup</button><label>Restore from file<input type="file" id="rs" accept=".json"></label></div></div>`;
+ $('#bk').onclick=()=>download('elp-attendance-backup-'+today()+'.json',JSON.stringify(db),'application/json');
+ $('#rs').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(!Array.isArray(d.classes)||typeof d.records!=='object')throw 0;
+  if(confirm('Replace all current data with this backup?')){db=d;save();render();toast('Backup restored')}}catch(x){toast('That file is not a valid backup.')}})};
+}
+function addClass(){const n=prompt('Class name (e.g. ELP Level 2 - Morning)');if(n&&n.trim()){const c={id:uid(),name:n.trim(),students:[]};db.classes.push(c);db.current=c.id;tab='students';save();render()}}
+$('#newCls').onclick=addClass;
+$('#cls').onchange=e=>{db.current=e.target.value;save();render()};
+$('#tabs').onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;render()}};
+if(!db.current&&db.classes[0])db.current=db.classes[0].id;
+render();
+</script>
+</body>
+</html>
